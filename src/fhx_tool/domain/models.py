@@ -35,3 +35,19 @@ class ExportedFile:
     name: str
     path: Path
     row_count: int
+
+    
+@dataclass(frozen=True, slots=True)
+class ModuleInventoryRecord:
+    module_name: str
+    description: str
+    controller: str
+    plant_area: str
+    module_class: str
+    module_type: str
+    module_subtype: str
+    primary_display: str
+    faceplate: str
+    detail_display: str
+    user: str
+    time_stamp: str

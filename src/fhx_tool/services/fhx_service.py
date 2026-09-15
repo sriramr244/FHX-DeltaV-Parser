@@ -16,6 +16,7 @@ from fhx_tool.exporters.csv_exporter import CsvExporter
 from fhx_tool.io.fhx_reader import FhxReader
 from fhx_tool.parsers.attribute_parser import AttributeParser
 from fhx_tool.parsers.history_parser import HistoryParser
+from fhx_tool.parsers.module_inventory_parser import ModuleInventoryParser
 from fhx_tool.parsers.object_parser import ObjectParseSpec, ObjectParser
 from fhx_tool.progress.base import ProgressReporter
 from fhx_tool.progress.null import NullProgressReporter
@@ -33,6 +34,7 @@ class ProcessingSummary:
     source_file: Path
     output_directory: Path
     history_point_count: int
+    module_inventory_count: int
     exported_files: tuple[Path, ...]
 
 
@@ -45,6 +47,7 @@ class FhxProcessingService:
         object_parser: ObjectParser | None = None,
         attribute_parser: AttributeParser | None = None,
         history_parser: HistoryParser | None = None,
+        module_inventory_parser: ModuleInventoryParser | None = None,
         exporter: CsvExporter | None = None,
         progress: ProgressReporter | None = None,
     ) -> None:
@@ -53,6 +56,9 @@ class FhxProcessingService:
         self._object_parser = object_parser or ObjectParser()
         self._attribute_parser = attribute_parser or AttributeParser()
         self._history_parser = history_parser or HistoryParser()
+        self._module_inventory_parser = (
+            module_inventory_parser or ModuleInventoryParser()
+        )
         self._exporter = exporter or CsvExporter()
         self._progress = progress or NullProgressReporter()
 
@@ -64,7 +70,7 @@ class FhxProcessingService:
         source_file = Path(source_file)
         output_directory = Path(output_directory)
 
-        self._progress.start(7)
+        self._progress.start(8)
 
         try:
             lines = self._reader.read_lines(source_file)
@@ -94,6 +100,9 @@ class FhxProcessingService:
             )
             self._progress.advance("Parsing module attributes")
 
+            module_inventory = self._module_inventory_parser.parse(lines)
+            self._progress.advance("Parsing module inventory")
+
             history_points = self._history_parser.parse(lines)
             self._progress.advance("Parsing history points")
 
@@ -103,6 +112,7 @@ class FhxProcessingService:
                 module_class_attributes=module_class_attributes,
                 module_instance_attributes=module_instance_attributes,
                 module_attributes=module_attributes,
+                module_inventory=module_inventory,
                 history_points=history_points,
             )
             self._progress.advance("Writing output")
@@ -111,6 +121,7 @@ class FhxProcessingService:
                 source_file=source_file,
                 output_directory=output_directory,
                 history_point_count=len(history_points),
+                module_inventory_count=len(module_inventory),
                 exported_files=tuple(item.path for item in exported),
             )
 

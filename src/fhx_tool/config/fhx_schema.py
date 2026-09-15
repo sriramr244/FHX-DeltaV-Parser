@@ -88,4 +88,5 @@ OUTPUT_FILES: Final[dict[str, str]] = {
     "module": "_classless_module.csv",
     "module_attrib": "_classless_module_attrib.csv",
     "history": "_history_tags.csv",
+    "module_inventory": "_module_inventory.csv",
 }
