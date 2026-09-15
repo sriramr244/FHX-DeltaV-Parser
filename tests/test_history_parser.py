@@ -31,9 +31,7 @@ def test_history_parser_builds_pi_tag_and_af_path() -> None:
     assert point.module_description == "Pilot B-510 Process Shutdown"
     assert point.unit_module_name == "00-B510"
     assert point.process_cell_name == ""
-    assert point.af_element_path == r"00-PLT-100\00-B510\00-B510-RESD_O"
-    assert point.history_instance == "EDC1/OUT_D"
-    assert point.field_name == "CV"
+    assert point.plant_area == "00-PLT-100/00-B510"
     assert point.properties["SAMPLE_PERIOD_SECONDS"] == "1"
 
 

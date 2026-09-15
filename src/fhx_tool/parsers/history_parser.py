@@ -4,7 +4,7 @@ import re
 from typing import Sequence
 
 from fhx_tool.domain.models import HistoryPoint
-from .common import af_path, iter_top_level_blocks, leaf_name, quoted_assignments
+from .common import iter_top_level_blocks, leaf_name, quoted_assignments
 
 
 class HistoryParser:
@@ -106,19 +106,16 @@ class HistoryParser:
 
             results.append(
                 HistoryPoint(
-                    history_tag=history_tag,
-                    module_name=module_name,
-                    module_description=description,
-                    module_class=module_class,
-                    unit_module_name=unit_name,
-                    process_cell_name=process_cell_name,
-                    af_element_path=af_path(plant_area, module_name),
-                    history_instance=history_instance,
-                    field_name=field_name,
-                    plant_area=plant_area,
-                    properties=properties,
+                        history_tag=history_tag,
+                        module_name=module_name,
+                        module_description=description,
+                        module_class=module_class,
+                        plant_area=plant_area,
+                        unit_module_name=unit_name,
+                        process_cell_name=process_cell_name,
+                        properties=properties,
+                    )
                 )
-            )
 
         return results
 

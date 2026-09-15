@@ -11,12 +11,9 @@ class HistoryPoint:
     module_name: str
     module_description: str
     module_class: str
+    plant_area: str
     unit_module_name: str
     process_cell_name: str
-    af_element_path: str
-    history_instance: str
-    field_name: str
-    plant_area: str
     properties: Mapping[str, str] = field(default_factory=dict)
 
 

@@ -14,16 +14,14 @@ class CsvExportError(RuntimeError):
 
 class CsvExporter:
     HISTORY_HEADERS = (
-        "HISTORY_TAG",
-        "MODULE_NAME",
-        "MODULE_DESCRIPTION",
-        "MODULE_CLASS",
-        "UNIT_MODULE_NAME",
-        "PROCESS_CELL_NAME",
-        "AF_ELEMENT_PATH",
-        "HISTORY_INSTANCE",
-        "FIELD",
-    )
+    "HISTORY_TAG",
+    "MODULE_NAME",
+    "MODULE_DESCRIPTION",
+    "MODULE_CLASS",
+    "PLANT_AREA",
+    "UNIT_MODULE_NAME",
+    "PROCESS_CELL_NAME",
+        )
 
     ATTRIBUTE_HEADERS = ("OBJECT", "ATTRIBUTE", "VALUE")
 
@@ -93,19 +91,17 @@ class CsvExporter:
     ) -> ExportedFile:
         rows: list[Sequence[str]] = [self.HISTORY_HEADERS]
         rows.extend(
-            (
-                point.history_tag,
-                point.module_name,
-                point.module_description,
-                point.module_class,
-                point.unit_module_name,
-                point.process_cell_name,
-                point.af_element_path,
-                point.history_instance,
-                point.field_name,
+                (
+                    point.history_tag,
+                    point.module_name,
+                    point.module_description,
+                    point.module_class,
+                    point.plant_area,
+                    point.unit_module_name,
+                    point.process_cell_name,
+                )
+                for point in points
             )
-            for point in points
-        )
         return self._write_rows(path, rows)
 
     @staticmethod
