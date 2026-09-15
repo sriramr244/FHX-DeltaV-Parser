@@ -17,6 +17,8 @@ from fhx_tool.io.fhx_reader import FhxReader
 from fhx_tool.parsers.attribute_parser import AttributeParser
 from fhx_tool.parsers.history_parser import HistoryParser
 from fhx_tool.parsers.object_parser import ObjectParseSpec, ObjectParser
+from fhx_tool.progress.base import ProgressReporter
+from fhx_tool.progress.null import NullProgressReporter
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +46,7 @@ class FhxProcessingService:
         attribute_parser: AttributeParser | None = None,
         history_parser: HistoryParser | None = None,
         exporter: CsvExporter | None = None,
+        progress: ProgressReporter | None = None,
     ) -> None:
         self._fields = fields or ParserFields()
         self._reader = reader or FhxReader()
@@ -51,47 +54,73 @@ class FhxProcessingService:
         self._attribute_parser = attribute_parser or AttributeParser()
         self._history_parser = history_parser or HistoryParser()
         self._exporter = exporter or CsvExporter()
+        self._progress = progress or NullProgressReporter()
 
-    def process(self, source_file: Path, output_directory: Path) -> ProcessingSummary:
+    def process(
+        self,
+        source_file: Path,
+        output_directory: Path,
+    ) -> ProcessingSummary:
         source_file = Path(source_file)
         output_directory = Path(output_directory)
-        lines = self._reader.read_lines(source_file)
 
-        object_tables = self._parse_object_tables(lines)
-        module_class_attributes = self._attribute_parser.parse(
-            lines,
-            HEADER_PATTERNS["module_class_attrib"],
-            "NAME",
-        )
-        module_instance_attributes = self._attribute_parser.parse(
-            lines,
-            HEADER_PATTERNS["module_instance_attrib"],
-            "TAG",
-        )
-        module_attributes = self._attribute_parser.parse(
-            lines,
-            HEADER_PATTERNS["module_attrib"],
-            "TAG",
-        )
-        history_points = self._history_parser.parse(lines)
+        self._progress.start(7)
 
-        exported = self._exporter.export_all(
-            output_dir=output_directory,
-            object_tables=object_tables,
-            module_class_attributes=module_class_attributes,
-            module_instance_attributes=module_instance_attributes,
-            module_attributes=module_attributes,
-            history_points=history_points,
-        )
+        try:
+            lines = self._reader.read_lines(source_file)
+            self._progress.advance("Reading FHX")
 
-        return ProcessingSummary(
-            source_file=source_file,
-            output_directory=output_directory,
-            history_point_count=len(history_points),
-            exported_files=tuple(item.path for item in exported),
-        )
+            object_tables = self._parse_object_tables(lines)
+            self._progress.advance("Parsing objects")
 
-    def _parse_object_tables(self, lines: Sequence[str]) -> list[ObjectTable]:
+            module_class_attributes = self._attribute_parser.parse(
+                lines,
+                HEADER_PATTERNS["module_class_attrib"],
+                "NAME",
+            )
+            self._progress.advance("Parsing module class attributes")
+
+            module_instance_attributes = self._attribute_parser.parse(
+                lines,
+                HEADER_PATTERNS["module_instance_attrib"],
+                "TAG",
+            )
+            self._progress.advance("Parsing module instance attributes")
+
+            module_attributes = self._attribute_parser.parse(
+                lines,
+                HEADER_PATTERNS["module_attrib"],
+                "TAG",
+            )
+            self._progress.advance("Parsing module attributes")
+
+            history_points = self._history_parser.parse(lines)
+            self._progress.advance("Parsing history points")
+
+            exported = self._exporter.export_all(
+                output_dir=output_directory,
+                object_tables=object_tables,
+                module_class_attributes=module_class_attributes,
+                module_instance_attributes=module_instance_attributes,
+                module_attributes=module_attributes,
+                history_points=history_points,
+            )
+            self._progress.advance("Writing output")
+
+            return ProcessingSummary(
+                source_file=source_file,
+                output_directory=output_directory,
+                history_point_count=len(history_points),
+                exported_files=tuple(item.path for item in exported),
+            )
+
+        finally:
+            self._progress.finish()
+
+    def _parse_object_tables(
+        self,
+        lines: Sequence[str],
+    ) -> list[ObjectTable]:
         specs = (
             ObjectParseSpec(
                 header_pattern=HEADER_PATTERNS["module_class"],

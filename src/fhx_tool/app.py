@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import logging
 
-from fhx_tool.services.fhx_service import FhxProcessingService, ProcessingSummary
+from fhx_tool.progress.base import ProgressReporter
+from fhx_tool.progress.tk_progress import TkProgressReporter
+from fhx_tool.services.fhx_service import (
+    FhxProcessingService,
+    ProcessingSummary,
+)
 from fhx_tool.ui.ports import DesktopUi
 from fhx_tool.ui.tk_adapter import TkDesktopUi
 
@@ -10,8 +15,12 @@ from fhx_tool.ui.tk_adapter import TkDesktopUi
 logger = logging.getLogger(__name__)
 
 
-def build_service() -> FhxProcessingService:
-    return FhxProcessingService()
+def build_service(
+    progress: ProgressReporter | None = None,
+) -> FhxProcessingService:
+    return FhxProcessingService(
+        progress=progress,
+    )
 
 
 def _success_message(summary: ProcessingSummary) -> str:
@@ -23,7 +32,10 @@ def _success_message(summary: ProcessingSummary) -> str:
     )
 
 
-def run(ui: DesktopUi, service: FhxProcessingService) -> int:
+def run(
+    ui: DesktopUi,
+    service: FhxProcessingService,
+) -> int:
     source_file = ui.select_fhx_file()
 
     if source_file is None:
@@ -32,13 +44,23 @@ def run(ui: DesktopUi, service: FhxProcessingService) -> int:
     output_directory = source_file.parent / "output"
 
     try:
-        summary = service.process(source_file, output_directory)
+        summary = service.process(
+            source_file,
+            output_directory,
+        )
     except Exception as exc:
         logger.exception("FHX processing failed")
-        ui.show_error("FHX Parser", str(exc))
+        ui.show_error(
+            "FHX Parser",
+            str(exc),
+        )
         return 1
 
-    ui.show_success("FHX Parser", _success_message(summary))
+    ui.show_success(
+        "FHX Parser",
+        _success_message(summary),
+    )
+
     return 0
 
 
@@ -47,4 +69,16 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    return run(TkDesktopUi(), build_service())
+
+    ui = TkDesktopUi()
+
+    try:
+        progress = TkProgressReporter(ui.root)
+        service = build_service(progress)
+
+        return run(
+            ui,
+            service,
+        )
+    finally:
+        ui.close()

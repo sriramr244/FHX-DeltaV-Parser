@@ -10,16 +10,13 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "pyinstaller>=6.0",
-]
+dev = ["pytest>=8.0", "pyinstaller>=6.0"]
 
 [project.scripts]
 fhx-tool = "fhx_tool.app:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
