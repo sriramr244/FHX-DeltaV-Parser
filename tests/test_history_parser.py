@@ -3,15 +3,15 @@ from fhx_tool.parsers.history_parser import HistoryParser
 
 def test_history_parser_builds_pi_tag_and_af_path() -> None:
     lines = [
-        'PROCESS_CELL NAME="LIN-00-AIR" PLANT_AREA="00-PLT-100"',
+        'PROCESS_CELL NAME="CELL_001" PLANT_AREA="AREA_001"',
         '{',
         '}',
-        'BATCH_EQUIPMENT_UNIT_MODULE NAME="00-B510" CLASS=""',
+        'BATCH_EQUIPMENT_UNIT_MODULE NAME="UNIT_001" CLASS=""',
         '{',
         '}',
-        'MODULE_INSTANCE TAG="00-B510-RESD_O" PLANT_AREA="00-PLT-100/00-B510" MODULE_CLASS="APX_M_NORS_I" CATEGORY=""',
+        'MODULE_INSTANCE TAG="MODULE_001" PLANT_AREA="AREA_001/UNIT_001" MODULE_CLASS="CLASS_HISTORY" CATEGORY=""',
         '{',
-        '  DESCRIPTION="Pilot B-510 Process Shutdown"',
+        '  DESCRIPTION="Generic history module"',
         '  HISTORY_DATA_POINT_INSTANCE NAME="EDC1/OUT_D"',
         '  {',
         '    HISTORY_DATA_POINT FIELD="CV"',
@@ -25,24 +25,24 @@ def test_history_parser_builds_pi_tag_and_af_path() -> None:
 
     point = HistoryParser().parse(lines)[0]
 
-    assert point.history_tag == "00-B510-RESD_O/EDC1/OUT_D.CV"
-    assert point.module_name == "00-B510-RESD_O"
-    assert point.module_class == "APX_M_NORS_I"
-    assert point.module_description == "Pilot B-510 Process Shutdown"
-    assert point.unit_module_name == "00-B510"
+    assert point.history_tag == "MODULE_001/EDC1/OUT_D.CV"
+    assert point.module_name == "MODULE_001"
+    assert point.module_class == "CLASS_HISTORY"
+    assert point.module_description == "Generic history module"
+    assert point.unit_module_name == "UNIT_001"
     assert point.process_cell_name == ""
-    assert point.plant_area == "00-PLT-100/00-B510"
+    assert point.plant_area == "AREA_001/UNIT_001"
     assert point.properties["SAMPLE_PERIOD_SECONDS"] == "1"
 
 
 def test_history_parser_identifies_direct_process_cell_parent() -> None:
     lines = [
-        'PROCESS_CELL NAME="LIN-00-AIR" PLANT_AREA="00-PLT-100"',
+        'PROCESS_CELL NAME="CELL_001" PLANT_AREA="AREA_001"',
         '{',
         '}',
-        'MODULE_INSTANCE TAG="00-AI-11109" PLANT_AREA="00-PLT-100/LIN-00-AIR" MODULE_CLASS="A_AI" CATEGORY=""',
+        'MODULE_INSTANCE TAG="MODULE_002" PLANT_AREA="AREA_001/CELL_001" MODULE_CLASS="CLASS_AI" CATEGORY=""',
         '{',
-        '  DESCRIPTION="IA Dryer A Dewpoint"',
+        '  DESCRIPTION="Generic analog module"',
         '  HISTORY_DATA_POINT_INSTANCE NAME="AI1/PV"',
         '  {',
         '    HISTORY_DATA_POINT FIELD="CV"',
@@ -55,6 +55,6 @@ def test_history_parser_identifies_direct_process_cell_parent() -> None:
 
     point = HistoryParser().parse(lines)[0]
 
-    assert point.process_cell_name == "LIN-00-AIR"
+    assert point.process_cell_name == "CELL_001"
     assert point.unit_module_name == ""
-    assert point.history_tag == "00-AI-11109/AI1/PV.CV"
+    assert point.history_tag == "MODULE_002/AI1/PV.CV"

@@ -51,3 +51,36 @@ class ModuleInventoryRecord:
     detail_display: str
     user: str
     time_stamp: str
+
+@dataclass(frozen=True, slots=True)
+class AlarmRecord:
+    module_name: str
+    module_class: str
+    plant_area: str
+    controller: str
+
+    module_alarm: str
+    alarm_type: str
+
+    source_block: str
+    block_type: str
+    cause_parameter: str
+
+    limit_parameter: str
+    limit: str
+    hysteresis: str
+    delay_on: str
+    delay_off: str
+
+    enabled: bool
+    priority: str
+    units: str
+    description: str
+
+@dataclass(frozen=True, slots=True)
+class ResolvedModule:
+    module_name: str
+    module_class: str
+    plant_area: str
+    controller: str
+    effective_body: tuple[str, ...]
