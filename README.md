@@ -1,6 +1,6 @@
 # FHX Parser
 
-Production-structured DeltaV FHX parser with CSV export, an alarm report, and PI AF preparation metadata.
+Production-structured DeltaV FHX parser with CSV export, an alarm report, History report generation.
 
 Point it at an FHX export and it writes an `output` folder beside the selected file. No DeltaV installation or database connection is needed. The export is the only input.
 
