@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Iterator
 
+from fhx_tool.config.fhx_schema import PATH_SEPARATORS
+
 
 _QUOTED_ASSIGNMENT = re.compile(r'\b([A-Z0-9_]+)="([^"]*)"')
 
@@ -13,6 +15,18 @@ def quoted_assignments(line: str) -> dict[str, str]:
 
 def first_quoted_values(line: str, count: int) -> list[str]:
     return re.findall(r'="([^"]*)"', line)[:count]
+
+
+def canonical_path(path: str) -> str:
+    normalized = path.strip()
+
+    for separator in PATH_SEPARATORS:
+        normalized = normalized.replace(separator, "/")
+
+    while normalized.startswith("^/"):
+        normalized = normalized[2:]
+
+    return normalized.lstrip("/")
 
 
 def leaf_name(path: str) -> str:

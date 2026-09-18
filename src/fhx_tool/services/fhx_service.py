@@ -6,12 +6,9 @@ from typing import Sequence
 
 from fhx_tool.config.fhx_schema import (
     HEADER_PATTERNS,
-    MC_FIELDS,
-    MI_FIELDS,
-    MOD_FIELDS,
     OUTPUT_FILES,
 )
-from fhx_tool.domain.models import ObjectTable
+from fhx_tool.domain.models import ObjectTable, ProcessingSummary, ParserFields
 from fhx_tool.exporters.csv_exporter import CsvExporter
 from fhx_tool.exporters.excel_exporter import ExcelExporter
 from fhx_tool.io.fhx_reader import FhxReader
@@ -28,25 +25,7 @@ from fhx_tool.parsers.object_parser import (
 from fhx_tool.progress.base import ProgressReporter
 from fhx_tool.progress.null import NullProgressReporter
 from fhx_tool.services.module_resolver import ModuleResolver
-
-
-@dataclass(frozen=True, slots=True)
-class ParserFields:
-    module_class: Sequence[str] = MC_FIELDS
-    module_instance: Sequence[str] = MI_FIELDS
-    module: Sequence[str] = MOD_FIELDS
-
-
-@dataclass(frozen=True, slots=True)
-class ProcessingSummary:
-    source_file: Path
-    output_directory: Path
-    history_point_count: int
-    module_inventory_count: int
-    alarm_count: int
-    alarm_module_count: int
-    alarm_report: Path
-    exported_files: tuple[Path, ...]
+from fhx_tool.parsers.composite_parser import CompositeParser
 
 
 class FhxProcessingService:
@@ -63,6 +42,7 @@ class FhxProcessingService:
         ) = None,
         module_resolver: ModuleResolver | None = None,
         alarm_parser: AlarmParser | None = None,
+        composite_parser: CompositeParser | None = None,
         exporter: CsvExporter | None = None,
         excel_exporter: ExcelExporter | None = None,
         progress: ProgressReporter | None = None,
@@ -87,6 +67,9 @@ class FhxProcessingService:
         )
         self._alarm_parser = (
             alarm_parser or AlarmParser()
+        )
+        self._composite_parser = (
+            composite_parser or CompositeParser()
         )
         self._exporter = exporter or CsvExporter()
         self._excel_exporter = (
@@ -177,6 +160,10 @@ class FhxProcessingService:
                 "Resolving modules"
             )
 
+            composites = (
+                self._composite_parser.parse(lines)
+            )
+
             alarm_records = [
                 record
                 for module in resolved_modules
@@ -186,8 +173,10 @@ class FhxProcessingService:
                     plant_area=module.plant_area,
                     controller=module.controller,
                     body=module.effective_body,
+                    composites=composites,
                 )
             ]
+            
             self._progress.advance(
                 "Parsing module alarms"
             )

@@ -42,6 +42,10 @@ def _success_message(
         f"{len(summary.exported_files)}\n\n"
         f"Alarm report:\n"
         f"{summary.alarm_report}\n\n"
+        f"Modules with alarms: "
+        f"{summary.alarm_module_count}\n"
+        f"Alarms: "
+        f"{summary.alarm_count}\n"
         f"Output folder:\n"
         f"{summary.output_directory}"
     )

@@ -4,13 +4,17 @@ import re
 from collections.abc import Mapping, Sequence
 
 from fhx_tool.config.fhx_schema import (
-    ALARM_ATTRIBUTE_SUFFIX,
+    ALARM_PARAMETER_SUFFIXES,
     ALARM_TYPE_BY_ACTIVE_PARAMETER,
+    ALARM_VALUE_KEY,
     BLOCK_SCALE_PARAMETERS,
-    SUPPORTED_ALARM_BLOCK_TYPES,
     TRUE_VALUES,
 )
 from fhx_tool.domain.models import AlarmRecord
+from fhx_tool.parsers.common import canonical_path
+from fhx_tool.parsers.composite_parser import (
+    CompositeCatalog,
+)
 
 
 class AlarmParser:
@@ -29,16 +33,35 @@ class AlarmParser:
     )
 
     _plain_assignment = re.compile(
-        r'\b([A-Z0-9_]+)=([^\s{}]+)'
+        r'\b([A-Z0-9_]+)=([^\s{}"]+)'
     )
 
-    _current_value = re.compile(
-        r'\bCV=(?:"([^"]*)"|([^\s{}]+))'
+    _cause_fields = (
+        "MONATTR",
+        "PARAM1",
+        "ALMATTR",
     )
 
-    _units = re.compile(
-        r'\bUNITS="([^"]*)"'
+    _limit_fields = (
+        "PARAM2",
+        "PARAM1",
     )
+
+    _limit_suffix = ALARM_PARAMETER_SUFFIXES["limit"]
+
+    _hysteresis_suffix = ALARM_PARAMETER_SUFFIXES[
+        "hysteresis"
+    ]
+
+    _delay_on_suffix = ALARM_PARAMETER_SUFFIXES[
+        "delay_on"
+    ]
+
+    _delay_off_suffix = ALARM_PARAMETER_SUFFIXES[
+        "delay_off"
+    ]
+
+    _block_hysteresis_parameter = "ALARM_HYS"
 
     def parse(
         self,
@@ -48,70 +71,28 @@ class AlarmParser:
         plant_area: str,
         controller: str,
         body: Sequence[str],
+        composites: CompositeCatalog | None = None,
     ) -> list[AlarmRecord]:
+        catalog = composites or CompositeCatalog()
         block_types = self._parse_block_types(body)
         attributes = self._parse_attributes(body)
         records: list[AlarmRecord] = []
 
-        for module_alarm, alarm_lines in attributes.items():
-            if not self._is_alarm_attribute(module_alarm):
+        for module_alarm, fields in attributes.items():
+            if not self._is_alarm(fields):
                 continue
 
-            alarm_fields = self._parse_assignments(alarm_lines)
-            cause_parameter = alarm_fields.get("ALMATTR", "")
-
-            if not cause_parameter:
-                continue
-
-            enabled = self._to_bool(
-                alarm_fields.get("ENAB", "F")
+            limit_parameter = self._limit_parameter(
+                fields
             )
 
-            if not enabled:
-                continue
-
-            source_block, active_parameter = self._split_path(
-                cause_parameter
+            cause_parameter = self._cause_parameter(
+                fields
             )
 
-            alarm_type = ALARM_TYPE_BY_ACTIVE_PARAMETER.get(
-                active_parameter.upper(),
-                "",
-            )
-
-            if not alarm_type:
-                continue
-
-            block_type = self._find_block_type(
-                block_types,
-                source_block,
-            )
-
-            if block_type.upper() not in SUPPORTED_ALARM_BLOCK_TYPES:
-                continue
-
-            limit_parameter = self._resolve_limit_parameter(
-                alarm_fields,
-                source_block,
-                alarm_type,
-            )
-
-            hysteresis_parameter = self._build_parameter_path(
-                source_block,
-                alarm_type,
-                "HYS",
-            )
-
-            delay_on_parameter = self._build_parameter_path(
-                source_block,
-                alarm_type,
-                "DELAY_ON",
-            )
-
-            delay_off_parameter = self._build_parameter_path(
-                source_block,
-                alarm_type,
-                "DELAY_OFF",
+            source_block = self._source_block(
+                limit_parameter,
+                cause_parameter,
             )
 
             records.append(
@@ -121,31 +102,52 @@ class AlarmParser:
                     plant_area=plant_area,
                     controller=controller,
                     module_alarm=module_alarm,
-                    alarm_type=alarm_type,
-                    source_block=source_block,
-                    block_type=block_type,
-                    cause_parameter=self._normalize_path(
-                        cause_parameter
+                    alarm_type=self._alarm_type(
+                        fields
                     ),
+                    source_block=source_block,
+                    block_type=self._block_type(
+                        block_types,
+                        catalog,
+                        source_block,
+                    ),
+                    cause_parameter=cause_parameter,
                     limit_parameter=limit_parameter,
-                    limit=self._attribute_value(
+                    limit=self._value(
                         attributes,
+                        block_types,
+                        catalog,
                         limit_parameter,
                     ),
-                    hysteresis=self._attribute_value(
+                    hysteresis=self._hysteresis(
                         attributes,
-                        hysteresis_parameter,
+                        block_types,
+                        catalog,
+                        limit_parameter,
+                        source_block,
                     ),
-                    delay_on=self._attribute_value(
+                    delay_on=self._value(
                         attributes,
-                        delay_on_parameter,
+                        block_types,
+                        catalog,
+                        self._sibling_parameter(
+                            limit_parameter,
+                            self._delay_on_suffix,
+                        ),
                     ),
-                    delay_off=self._attribute_value(
+                    delay_off=self._value(
                         attributes,
-                        delay_off_parameter,
+                        block_types,
+                        catalog,
+                        self._sibling_parameter(
+                            limit_parameter,
+                            self._delay_off_suffix,
+                        ),
                     ),
-                    enabled=enabled,
-                    priority=alarm_fields.get(
+                    enabled=self._to_bool(
+                        fields.get("ENAB", "F")
+                    ),
+                    priority=fields.get(
                         "PRIORITY_NAME",
                         "",
                     ),
@@ -153,7 +155,7 @@ class AlarmParser:
                         attributes,
                         source_block,
                     ),
-                    description=alarm_fields.get(
+                    description=fields.get(
                         "ALARM_DESCRIPTION",
                         "",
                     ),
@@ -179,8 +181,8 @@ class AlarmParser:
     def _parse_attributes(
         self,
         body: Sequence[str],
-    ) -> dict[str, list[str]]:
-        attributes: dict[str, list[str]] = {}
+    ) -> dict[str, dict[str, str]]:
+        attributes: dict[str, dict[str, str]] = {}
         index = 0
 
         while index < len(body):
@@ -190,7 +192,7 @@ class AlarmParser:
                 index += 1
                 continue
 
-            attribute_name = self._normalize_path(
+            attribute_name = canonical_path(
                 match.group(1)
             )
 
@@ -199,9 +201,24 @@ class AlarmParser:
                 index,
             )
 
-            attributes[attribute_name] = section
+            self._merge_assignments(
+                attributes.setdefault(
+                    attribute_name,
+                    {},
+                ),
+                self._parse_assignments(section),
+            )
 
         return attributes
+
+    def _merge_assignments(
+        self,
+        target: dict[str, str],
+        source: Mapping[str, str],
+    ) -> None:
+        for key, value in source.items():
+            if value != "" or key not in target:
+                target[key] = value
 
     def _read_braced_section(
         self,
@@ -248,135 +265,280 @@ class AlarmParser:
 
         return assignments
 
-    def _attribute_value(
+    def _is_alarm(
         self,
-        attributes: Mapping[str, Sequence[str]],
-        attribute_name: str,
-    ) -> str:
-        normalized_name = self._normalize_path(
-            attribute_name
+        fields: Mapping[str, str],
+    ) -> bool:
+        if fields.get(ALARM_VALUE_KEY, "").strip():
+            return True
+
+        if not fields.get("ALMATTR", "").strip():
+            return False
+
+        return bool(
+            fields.get("ENAB", "").strip()
+            or fields.get("PRIORITY_NAME", "").strip()
         )
 
-        lines = attributes.get(normalized_name)
-
-        if lines is None:
-            return ""
-
-        for line in lines:
-            match = self._current_value.search(line)
-
-            if match:
-                return match.group(1) or match.group(2) or ""
-
-        return ""
-
-    def _find_units(
+    def _alarm_type(
         self,
-        attributes: Mapping[str, Sequence[str]],
-        source_block: str,
+        fields: Mapping[str, str],
     ) -> str:
-        for scale_parameter in BLOCK_SCALE_PARAMETERS:
-            attribute_name = self._build_path(
-                source_block,
-                scale_parameter,
-            )
+        alarm_type = fields.get(
+            ALARM_VALUE_KEY,
+            "",
+        ).strip()
 
-            lines = attributes.get(attribute_name)
+        if alarm_type:
+            return alarm_type
 
-            if lines is None:
-                continue
+        active_parameter = canonical_path(
+            fields.get("ALMATTR", "")
+        ).rsplit("/", 1)[-1]
 
-            for line in lines:
-                match = self._units.search(line)
+        return ALARM_TYPE_BY_ACTIVE_PARAMETER.get(
+            active_parameter.upper(),
+            "",
+        )
 
-                if match:
-                    return match.group(1)
-
-        return ""
-
-    def _find_block_type(
+    def _limit_parameter(
         self,
-        block_types: Mapping[str, str],
-        source_block: str,
+        fields: Mapping[str, str],
     ) -> str:
-        direct_match = block_types.get(source_block)
-
-        if direct_match is not None:
-            return direct_match
-
-        block_name = source_block.rsplit("/", 1)[-1]
-        return block_types.get(block_name, "")
-
-    def _resolve_limit_parameter(
-        self,
-        alarm_fields: Mapping[str, str],
-        source_block: str,
-        alarm_type: str,
-    ) -> str:
-        configured_parameter = alarm_fields.get(
-            "LIMATTR",
-            ""
+        configured_parameter = canonical_path(
+            fields.get("LIMATTR", "")
         )
 
         if configured_parameter:
-            return self._normalize_path(
-                configured_parameter
+            return configured_parameter
+
+        for field_name in self._limit_fields:
+            candidate = canonical_path(
+                fields.get(field_name, "")
             )
 
-        return self._build_parameter_path(
-            source_block,
-            alarm_type,
-            "LIM",
+            if self._is_limit_parameter(candidate):
+                return candidate
+
+        return ""
+
+    def _cause_parameter(
+        self,
+        fields: Mapping[str, str],
+    ) -> str:
+        for field_name in self._cause_fields:
+            candidate = canonical_path(
+                fields.get(field_name, "")
+            )
+
+            if candidate:
+                return candidate
+
+        return ""
+
+    def _source_block(
+        self,
+        *parameters: str,
+    ) -> str:
+        for parameter in parameters:
+            if "/" in parameter:
+                return parameter.rsplit("/", 1)[0]
+
+        return ""
+
+    def _block_type(
+        self,
+        block_types: Mapping[str, str],
+        catalog: CompositeCatalog,
+        source_block: str,
+    ) -> str:
+        if not source_block:
+            return ""
+
+        definition = ""
+        children: Mapping[str, str] = block_types
+
+        for segment in source_block.split("/"):
+            definition = children.get(segment, "")
+
+            if not definition:
+                return block_types.get(
+                    source_block.rsplit("/", 1)[-1],
+                    "",
+                )
+
+            children = catalog.blocks.get(definition, {})
+
+        return definition
+
+    def _hysteresis(
+        self,
+        attributes: Mapping[str, Mapping[str, str]],
+        block_types: Mapping[str, str],
+        catalog: CompositeCatalog,
+        limit_parameter: str,
+        source_block: str,
+    ) -> str:
+        hysteresis = self._value(
+            attributes,
+            block_types,
+            catalog,
+            self._sibling_parameter(
+                limit_parameter,
+                self._hysteresis_suffix,
+            ),
         )
 
-    def _split_path(
+        if hysteresis or not source_block:
+            return hysteresis
+
+        return self._value(
+            attributes,
+            block_types,
+            catalog,
+            (
+                f"{source_block}/"
+                f"{self._block_hysteresis_parameter}"
+            ),
+        )
+
+    def _sibling_parameter(
         self,
-        path: str,
-    ) -> tuple[str, str]:
-        normalized = self._normalize_path(path)
-
-        if "/" not in normalized:
-            return "", normalized
-
-        source_block, parameter = normalized.rsplit("/", 1)
-        return source_block, parameter
-
-    def _build_parameter_path(
-        self,
-        source_block: str,
-        alarm_type: str,
+        limit_parameter: str,
         suffix: str,
     ) -> str:
-        return self._build_path(
-            source_block,
-            f"{alarm_type}_{suffix}",
+        if not self._is_limit_parameter(limit_parameter):
+            return ""
+
+        stem = limit_parameter[
+            : -len(self._limit_suffix)
+        ]
+
+        return f"{stem}{suffix}"
+
+    def _is_limit_parameter(
+        self,
+        parameter: str,
+    ) -> bool:
+        return parameter.upper().endswith(
+            self._limit_suffix
         )
 
-    def _build_path(
+    def _value(
         self,
-        source_block: str,
+        attributes: Mapping[str, Mapping[str, str]],
+        block_types: Mapping[str, str],
+        catalog: CompositeCatalog,
         parameter: str,
     ) -> str:
-        return f"{source_block}/{parameter}"
+        if not parameter:
+            return ""
 
-    def _normalize_path(
-        self,
-        path: str,
-    ) -> str:
-        normalized = path.strip()
+        path = canonical_path(parameter)
+        value = attributes.get(path, {}).get("CV", "")
 
-        while normalized.startswith("^/"):
-            normalized = normalized[2:]
+        if value:
+            return value
 
-        return normalized.lstrip("/")
-
-    def _is_alarm_attribute(
-        self,
-        attribute_name: str,
-    ) -> bool:
-        return attribute_name.upper().endswith(
-            ALARM_ATTRIBUTE_SUFFIX
+        exposed_parameter = self._exposed_parameter(
+            block_types,
+            catalog,
+            path,
         )
+
+        if not exposed_parameter:
+            return value
+
+        return attributes.get(
+            exposed_parameter,
+            {},
+        ).get("CV", value)
+
+    def _exposed_parameter(
+        self,
+        block_types: Mapping[str, str],
+        catalog: CompositeCatalog,
+        parameter: str,
+    ) -> str:
+        if parameter.count("/") < 2:
+            return ""
+
+        source_block, inner_parameter = parameter.split(
+            "/",
+            1,
+        )
+
+        definition = block_types.get(source_block, "")
+
+        if not definition:
+            return ""
+
+        exposed = catalog.aliases.get(
+            definition,
+            {},
+        ).get(inner_parameter, "")
+
+        return (
+            f"{source_block}/{exposed}"
+            if exposed
+            else ""
+        )
+
+    def _find_units(
+        self,
+        attributes: Mapping[str, Mapping[str, str]],
+        source_block: str,
+    ) -> str:
+        for parameter in self._scale_parameters(
+            source_block
+        ):
+            units = attributes.get(
+                parameter,
+                {},
+            ).get("UNITS", "").strip()
+
+            if units:
+                return units
+
+        return self._module_units(attributes)
+
+    def _scale_parameters(
+        self,
+        source_block: str,
+    ) -> list[str]:
+        if not source_block:
+            return list(BLOCK_SCALE_PARAMETERS)
+
+        root_block = source_block.split("/", 1)[0]
+        blocks = [source_block]
+
+        if root_block != source_block:
+            blocks.append(root_block)
+
+        scoped = [
+            f"{block}/{parameter}"
+            for block in blocks
+            for parameter in BLOCK_SCALE_PARAMETERS
+        ]
+
+        return scoped + list(BLOCK_SCALE_PARAMETERS)
+
+    def _module_units(
+        self,
+        attributes: Mapping[str, Mapping[str, str]],
+    ) -> str:
+        for parameter in BLOCK_SCALE_PARAMETERS:
+            units = {
+                fields.get("UNITS", "").strip()
+                for name, fields in attributes.items()
+                if name.rsplit("/", 1)[-1] == parameter
+                and fields.get("UNITS", "").strip()
+            }
+
+            if len(units) == 1:
+                return units.pop()
+
+        return ""
 
     def _to_bool(
         self,
