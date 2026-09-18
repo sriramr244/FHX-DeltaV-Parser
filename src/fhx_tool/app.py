@@ -3,7 +3,9 @@ from __future__ import annotations
 import logging
 
 from fhx_tool.progress.base import ProgressReporter
-from fhx_tool.progress.tk_progress import TkProgressReporter
+from fhx_tool.progress.tk_progress import (
+    TkProgressReporter,
+)
 from fhx_tool.services.fhx_service import (
     FhxProcessingService,
     ProcessingSummary,
@@ -23,12 +25,29 @@ def build_service(
     )
 
 
-def _success_message(summary: ProcessingSummary) -> str:
+def _success_message(
+    summary: ProcessingSummary,
+) -> str:
     return (
         f"Processed: {summary.source_file.name}\n\n"
-        f"History points: {summary.history_point_count}\n"
-        f"CSV files exported: {len(summary.exported_files)}\n\n"
-        f"Output folder:\n{summary.output_directory}"
+        f"Modules: "
+        f"{summary.module_inventory_count}\n"
+        f"History points: "
+        f"{summary.history_point_count}\n"
+        f"Modules with enabled alarms: "
+        f"{summary.alarm_module_count}\n"
+        f"Enabled alarms: "
+        f"{summary.alarm_count}\n"
+        f"Files exported: "
+        f"{len(summary.exported_files)}\n\n"
+        f"Alarm report:\n"
+        f"{summary.alarm_report}\n\n"
+        f"Modules with alarms: "
+        f"{summary.alarm_module_count}\n"
+        f"Alarms: "
+        f"{summary.alarm_count}\n"
+        f"Output folder:\n"
+        f"{summary.output_directory}"
     )
 
 
@@ -41,7 +60,9 @@ def run(
     if source_file is None:
         return 0
 
-    output_directory = source_file.parent / "output"
+    output_directory = (
+        source_file.parent / "output"
+    )
 
     try:
         summary = service.process(
@@ -49,11 +70,15 @@ def run(
             output_directory,
         )
     except Exception as exc:
-        logger.exception("FHX processing failed")
+        logger.exception(
+            "FHX processing failed"
+        )
+
         ui.show_error(
             "FHX Parser",
             str(exc),
         )
+
         return 1
 
     ui.show_success(
@@ -67,18 +92,29 @@ def run(
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        format=(
+            "%(asctime)s "
+            "%(levelname)s "
+            "%(name)s: "
+            "%(message)s"
+        ),
     )
 
     ui = TkDesktopUi()
 
     try:
-        progress = TkProgressReporter(ui.root)
-        service = build_service(progress)
+        progress = TkProgressReporter(
+            ui.root
+        )
+
+        service = build_service(
+            progress
+        )
 
         return run(
             ui,
             service,
         )
+
     finally:
         ui.close()
