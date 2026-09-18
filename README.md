@@ -55,6 +55,7 @@ History tag format is `MODULE/HISTORY_INSTANCE.FIELD`.
 Desktop:
 
 ```console
+pip install -e .
 python -m fhx_tool
 ```
 
