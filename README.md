@@ -21,15 +21,15 @@ Point it at an FHX export and it writes an `output` folder beside the selected f
 
 | File | Contents |
 | --- | --- |
-| `Module_class.csv` | Module class header fields |
-| `Module_class_attrib.csv` | Module class attribute instances |
-| `Module_class_inst.csv` | Module instance header fields |
-| `Module_class_inst_attrib.csv` | Module instance attribute instances |
-| `Classless_module.csv` | Classless module header fields |
-| `Classless_module_attrib.csv` | Classless module attribute instances |
-| `Module_inventory.csv` | One row per module with controller, area, class, type, displays, last user and timestamp |
-| `History_tags.csv` | History points prepared for PI AF |
-| `Module_alarm_report.xlsx` | One row per module alarm |
+| `_module_class.csv` | Module class header fields |
+| `_module_class_attrib.csv` | Module class attribute instances |
+| `_module_class_inst.csv` | Module instance header fields |
+| `_module_class_inst_attrib.csv` | Module instance attribute instances |
+| `_classless_module.csv` | Classless module header fields |
+| `_classless_module_attrib.csv` | Classless module attribute instances |
+| `_module_inventory.csv` | One row per module with controller, area, class, type, displays, last user and timestamp |
+| `_history_tags.csv` | History points prepared for PI AF |
+| `_module_alarm_report.xlsx` | One row per module alarm |
 
 ## Alarm report
 
@@ -54,13 +54,13 @@ History tag format is `MODULE/HISTORY_INSTANCE.FIELD`.
 
 Desktop:
 
-```
+```console
 python -m fhx_tool
 ```
 
 Tests:
 
-```
+```console
 pytest
 ```
 
@@ -71,5 +71,3 @@ Running `build_executable.py` creates a single-file windowed executable named `F
 The core parsing and service layers do not depend on Tkinter, so the UI can be replaced later without rewriting parsing logic.
 
 `parsers/block_scanner.py` walks the file once and returns every top level block grouped by kind. Nothing calls it yet. It is there for the next step, which is generating module instances from a control strategy document rather than only reading them.
-
-Reference run, a 13 MB single-area export: 511 modules, 343 history points, 3370 alarms across 492 modules, about three and a half seconds end to end.
