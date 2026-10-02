@@ -136,6 +136,12 @@ def test_service_processes_fhx_and_exports_alarm_report(
     assert summary.alarm_count == 1
     assert summary.alarm_module_count == 1
     assert summary.alarm_report.is_file()
+    filtered = load_workbook(summary.filtered_report)
+    assert filtered["Modules"].max_row == 1
+    assert filtered["Module History"].max_row == 1
+    assert filtered["Module Alarms"].max_row == 1
+    assert filtered["Review Alarms"]["A2"].value == "MODULE_001"
+    assert filtered["Review History"]["A2"].value == "MODULE_001"
 
     history_path = (
         output_directory
@@ -192,3 +198,50 @@ def test_service_processes_fhx_and_exports_alarm_report(
         worksheet["R2"].value
         == "Generic high alarm"
     )
+
+def test_filtered_report_associates_history_and_preserves_review(tmp_path):
+    source = tmp_path / "filtered.fhx"
+    source.write_text('''MODULE_CLASS NAME="AI" CATEGORY=""
+{
+ HISTORY_DATA_POINT_INSTANCE NAME="AI1/PV"
+ {
+  HISTORY_DATA_POINT FIELD="CV"
+  {
+   ENABLED=T
+   SAMPLE_PERIOD_SECONDS=2
+  }
+ }
+}
+MODULE_INSTANCE TAG="PT101" MODULE_CLASS="AI" PLANT_AREA="AREA" CATEGORY=""
+{
+ DESCRIPTION="Pressure"
+}
+MODULE_INSTANCE TAG="SS101" MODULE_CLASS="AI" PLANT_AREA="AREA" CATEGORY=""
+{
+ DESCRIPTION="Signal select"
+}
+MODULE_INSTANCE TAG="MYSTERY" MODULE_CLASS="AI" PLANT_AREA="AREA" CATEGORY=""
+{
+ DESCRIPTION="Unknown"
+}
+MODULE TAG="TT101" PLANT_AREA="AREA" CATEGORY=""
+{
+ DESCRIPTION="Temperature"
+}
+''', encoding="utf-16")
+    summary = FhxProcessingService().process(source, tmp_path / "output")
+    assert (summary.kept_module_count, summary.review_module_count, summary.removed_module_count) == (2, 1, 1)
+    assert summary.filtered_report in summary.exported_files
+    workbook = load_workbook(summary.filtered_report)
+    modules = workbook["Modules"]
+    assert [row[0] for row in modules.iter_rows(min_row=2, values_only=True)] == ["PT101", "TT101"]
+    assert modules["I2"].value == 1
+    assert modules["K2"].hyperlink.target == "#'Module History'!A2"
+    assert modules["I3"].value == 0
+    assert modules["J3"].value == "No history found in FHX"
+    history = workbook["Module History"]
+    assert history.max_row == 2
+    assert history["B2"].value == "PT101/AI1/PV.CV"
+    assert dict(zip([c.value for c in history[1]], [c.value for c in history[2]]))["SAMPLE_PERIOD_SECONDS"] == "2"
+    assert workbook["Review History"]["A2"].value == "MYSTERY"
+    assert workbook["Filter Audit"].max_row == 5

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -9,6 +8,8 @@ from fhx_tool.config.fhx_schema import (
     OUTPUT_FILES,
 )
 from fhx_tool.domain.models import ObjectTable, ProcessingSummary, ParserFields
+from fhx_tool.exporters.module_report_exporter import ModuleReportExporter
+from fhx_tool.services.module_filter import ModuleFilter
 from fhx_tool.exporters.csv_exporter import CsvExporter
 from fhx_tool.exporters.excel_exporter import ExcelExporter
 from fhx_tool.io.fhx_reader import FhxReader
@@ -46,7 +47,9 @@ class FhxProcessingService:
         exporter: CsvExporter | None = None,
         excel_exporter: ExcelExporter | None = None,
         progress: ProgressReporter | None = None,
+        module_filter: ModuleFilter | None = None,
     ) -> None:
+        self._module_filter = module_filter or ModuleFilter()
         self._fields = fields or ParserFields()
         self._reader = reader or FhxReader()
         self._object_parser = (
@@ -87,7 +90,7 @@ class FhxProcessingService:
         source_file = Path(source_file)
         output_directory = Path(output_directory)
 
-        self._progress.start(11)
+        self._progress.start(12)
 
         try:
             lines = self._reader.read_lines(source_file)
@@ -209,12 +212,18 @@ class FhxProcessingService:
                 "Writing alarm report"
             )
 
+            decisions = self._module_filter.classify(module_inventory)
+            filtered_export = ModuleReportExporter().export(
+                output_directory, decisions, history_points, alarm_records
+            )
+            self._progress.advance("Writing filtered module and history report")
+
             exported_files = (
                 tuple(
                     item.path
                     for item in exported
                 )
-                + (alarm_export.path,)
+                + (alarm_export.path, filtered_export.path)
             )
 
             alarm_module_count = len(
@@ -239,6 +248,10 @@ class FhxProcessingService:
                 ),
                 alarm_report=alarm_export.path,
                 exported_files=exported_files,
+                filtered_report=filtered_export.path,
+                kept_module_count=sum(d.classification == "KEEP" for d in decisions),
+                review_module_count=sum(d.classification == "REVIEW" for d in decisions),
+                removed_module_count=sum(d.classification == "REMOVE" for d in decisions),
             )
 
         finally:

@@ -29,7 +29,8 @@ Point it at an FHX export and it writes an `output` folder beside the selected f
 | `_classless_module_attrib.csv` | Classless module attribute instances |
 | `_module_inventory.csv` | One row per module with controller, area, class, type, displays, last user and timestamp |
 | `_history_tags.csv` | History points prepared for PI AF |
-| `_module_alarm_report.xlsx` | One row per module alarm |
+| `_module_alarm_report.xlsx` | One row per module alarm (unfiltered audit export) |
+| `_filtered_module_report.xlsx` | Selected modules with linked history, matching alarms, review sheets, and filter audit |
 
 ## Alarm report
 
@@ -46,9 +47,42 @@ Disabled alarms are reported with `Enabled` set to FALSE rather than dropped. A 
 
 ## History export
 
-The history export includes history tag, module name, module description, module class, unit module, process cell, AF element path, history instance, and field.
+The CSV history export includes history tag, module name, description, class, plant area, unit module, and process cell. The filtered workbook additionally includes all parsed history settings, including enable state and sample period when supplied in the FHX.
 
-History tag format is `MODULE/HISTORY_INSTANCE.FIELD`.
+History tag format is `MODULE/HISTORY_INSTANCE.FIELD`. Class-defined history is inherited by each module instance. Instance settings override individual class properties for the same path and field; `$` and `/` paths are normalized before merging. Disabled history points remain visible with their configured enable value.
+
+## Filtered module and history report
+
+Every normal desktop/service run also writes `_filtered_module_report.xlsx`:
+
+- **Modules**: retained modules, classification reason, history-point count, and a clickable link to their history rows.
+- **Module History**: one row per history point belonging to a retained module, with all parsed settings.
+- **Module Alarms**: alarms belonging to the same retained modules.
+- **Review Modules**, **Review History**, and **Review Alarms**: ambiguous modules and their associated records for manual review.
+- **Filter Audit**: every module and its KEEP / REMOVE / REVIEW decision, category, reason, and history count.
+
+The default filter keeps power, temperature, flow, pressure, level, valve, and well-related instrumentation based on tag patterns and module description/class/type metadata. It excludes explicit signal selectors, safety/ESD/SIS systems, detectors, building fans, trip/interlock/shutdown modules, and heat tracing. Alarm descriptions are not used to exclude an otherwise relevant module.
+
+Possible A/B/C transmitter groups are reviewed unless exactly one member is explicitly described as primary. The primary is retained and its redundant peers are excluded. A suffix alone never proves which transmitter is primary; numbered tags are not automatically treated as duplicates. Descriptions that indicate redundancy without an established primary are reviewed. Unrecognized equipment is also reviewed.
+
+Modules without parsed history remain in the report with a zero count and **No history found in FHX**. That label does not assert that history is disabled in the live system: the supplied export may be incomplete. These reports contain historian configuration, not recorded process values or timestamps.
+
+The original CSV and alarm outputs remain unfiltered audit exports. Use the new workbook for the shortened list. Its module, history, and alarm sheets use the same selection.
+
+Site-specific decisions can be supplied through the service API:
+
+```python
+from fhx_tool.services.fhx_service import FhxProcessingService
+from fhx_tool.services.module_filter import ModuleFilter
+
+service = FhxProcessingService(module_filter=ModuleFilter(overrides={
+    "10-PT-101A": "KEEP",   # confirmed primary
+    "10-PT-101B": "REMOVE", # confirmed redundant instrument
+}))
+# service.process(source_file, output_directory)
+```
+
+Overrides use exact module tags and accept `KEEP`, `REMOVE`, or `REVIEW`; each is identified in the audit sheet. Review classifications against your site's naming conventions before using the shortened list.
 
 ## Running
 

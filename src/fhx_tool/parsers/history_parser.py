@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Sequence
 
 from fhx_tool.domain.models import HistoryPoint
-from .common import iter_top_level_blocks, leaf_name, quoted_assignments
+from .common import canonical_path, iter_top_level_blocks, leaf_name
+from fhx_tool.services.module_resolver import ModuleResolver
 
 
 class HistoryParser:
     _unit_header = re.compile(r'^BATCH_EQUIPMENT_UNIT_MODULE\s+NAME="([^"]+)"')
     _process_cell_header = re.compile(r'^PROCESS_CELL\s+NAME="([^"]+)"')
-    _module_header = re.compile(r'^(MODULE_INSTANCE|MODULE)\s+TAG="([^"]+)"')
     _history_instance_header = re.compile(
         r'^\s*HISTORY_DATA_POINT_INSTANCE\s+NAME="([^"]+)"'
     )
@@ -25,11 +26,11 @@ class HistoryParser:
         process_cells = self._collect_names(lines, self._process_cell_header)
         points: list[HistoryPoint] = []
 
-        for header, body in iter_top_level_blocks(lines, self._module_header):
-            header_values = quoted_assignments(header)
-            module_name = header_values.get("TAG", "")
-            plant_area = header_values.get("PLANT_AREA", "")
-            module_class = header_values.get("MODULE_CLASS", "")
+        for module in ModuleResolver().resolve(lines):
+            body = module.effective_body
+            module_name = module.module_name
+            plant_area = module.plant_area
+            module_class = module.module_class
             description = self._module_description(body)
             area_leaf = leaf_name(plant_area)
             unit_name = area_leaf if area_leaf in unit_modules else ""
@@ -59,16 +60,17 @@ class HistoryParser:
 
     def _module_description(self, body: Sequence[str]) -> str:
         depth = 0
+        description = ""
 
         for line in body:
             if depth == 1:
                 match = self._description.match(line)
                 if match:
-                    return match.group(1)
+                    description = match.group(1)
 
             depth += line.count("{") - line.count("}")
 
-        return ""
+        return description
 
     def _parse_history_points(
         self,
@@ -81,31 +83,25 @@ class HistoryParser:
         unit_name: str,
         process_cell_name: str,
     ) -> list[HistoryPoint]:
-        results: list[HistoryPoint] = []
-        history_instance = ""
-        index = 0
-
-        while index < len(body):
-            line = body[index]
-            instance_match = self._history_instance_header.match(line)
-
-            if instance_match:
-                history_instance = instance_match.group(1)
-                index += 1
-                continue
-
-            point_match = self._history_point_header.match(line)
-
-            if not point_match or not history_instance:
-                index += 1
-                continue
-
-            field_name = point_match.group(1)
-            properties, index = self._history_properties(body, index + 1)
-            history_tag = f"{module_name}/{history_instance}.{field_name}"
-
-            results.append(
-                HistoryPoint(
+        # The resolver orders class before instance. Merge partial overrides
+        # by canonical instance path and field, retaining inherited properties.
+        results: dict[str, HistoryPoint] = {}
+        for header, instance_body in iter_top_level_blocks(body, self._history_instance_header):
+            match = self._history_instance_header.match(header)
+            assert match is not None
+            history_instance = canonical_path(match.group(1))
+            for point_header, point_body in iter_top_level_blocks(instance_body, self._history_point_header):
+                point_match = self._history_point_header.match(point_header)
+                assert point_match is not None
+                field_name = point_match.group(1)
+                properties, _ = self._history_properties(point_body, 0)
+                history_tag = f"{module_name}/{history_instance}.{field_name}"
+                key = history_tag.upper()
+                if key in results:
+                    previous = results[key]
+                    results[key] = replace(previous, properties={**previous.properties, **properties})
+                else:
+                    results[key] = HistoryPoint(
                         history_tag=history_tag,
                         module_name=module_name,
                         module_description=description,
@@ -115,9 +111,7 @@ class HistoryParser:
                         process_cell_name=process_cell_name,
                         properties=properties,
                     )
-                )
-
-        return results
+        return list(results.values())
 
     def _history_properties(
         self,

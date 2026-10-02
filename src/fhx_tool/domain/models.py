@@ -117,3 +117,7 @@ class ProcessingSummary:
     alarm_module_count: int
     alarm_report: Path
     exported_files: tuple[Path, ...]
+    filtered_report: Path | None = None
+    kept_module_count: int = 0
+    review_module_count: int = 0
+    removed_module_count: int = 0
