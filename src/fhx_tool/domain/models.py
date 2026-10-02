@@ -20,6 +20,10 @@ class HistoryPoint:
     unit_module_name: str
     process_cell_name: str
     properties: Mapping[str, str] = field(default_factory=dict)
+    source_block: str = ""
+    block_type: str = ""
+    history_instance: str = ""
+    field_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)

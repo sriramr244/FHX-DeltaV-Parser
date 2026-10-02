@@ -5,7 +5,8 @@ from dataclasses import replace
 from typing import Sequence
 
 from fhx_tool.domain.models import HistoryPoint
-from .common import canonical_path, iter_top_level_blocks, leaf_name
+from .common import canonical_path, iter_top_level_blocks, leaf_name, quoted_assignments
+from .composite_parser import CompositeParser
 from fhx_tool.services.module_resolver import ModuleResolver
 
 
@@ -25,6 +26,7 @@ class HistoryParser:
         unit_modules = self._collect_names(lines, self._unit_header)
         process_cells = self._collect_names(lines, self._process_cell_header)
         points: list[HistoryPoint] = []
+        catalog = CompositeParser().parse(lines)
 
         for module in ModuleResolver().resolve(lines):
             body = module.effective_body
@@ -36,17 +38,32 @@ class HistoryParser:
             unit_name = area_leaf if area_leaf in unit_modules else ""
             process_cell_name = area_leaf if area_leaf in process_cells else ""
 
-            points.extend(
-                self._parse_history_points(
-                    body=body,
-                    module_name=module_name,
-                    description=description,
-                    module_class=module_class,
-                    plant_area=plant_area,
-                    unit_name=unit_name,
-                    process_cell_name=process_cell_name,
-                )
+            module_points = self._parse_history_points(
+                body=body,
+                module_name=module_name,
+                description=description,
+                module_class=module_class,
+                plant_area=plant_area,
+                unit_name=unit_name,
+                process_cell_name=process_cell_name,
             )
+            blocks = {}
+            for line in body:
+                if re.match(r"^\s*FUNCTION_BLOCK\s+", line):
+                    values = quoted_assignments(line)
+                    if values.get("NAME") and values.get("DEFINITION"):
+                        blocks[canonical_path(values["NAME"]).upper()] = values["DEFINITION"]
+            for point in module_points:
+                source_block = point.history_instance.rpartition("/")[0]
+                definition = blocks.get(source_block.upper(), "")
+                if source_block and not definition:
+                    children = blocks
+                    for segment in source_block.split("/"):
+                        definition = children.get(segment.upper(), "")
+                        if not definition:
+                            break
+                        children = {canonical_path(k).upper(): v for k, v in catalog.blocks.get(definition, {}).items()}
+                points.append(replace(point, source_block=source_block, block_type=definition))
 
         return points
 
@@ -110,6 +127,8 @@ class HistoryParser:
                         unit_module_name=unit_name,
                         process_cell_name=process_cell_name,
                         properties=properties,
+                        history_instance=history_instance,
+                        field_name=field_name,
                     )
         return list(results.values())
 

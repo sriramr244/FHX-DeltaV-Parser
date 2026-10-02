@@ -25,7 +25,7 @@ class ModuleReportExporter:
             history[point.module_name].append(point)
         properties = sorted({key for point in history_points for key in point.properties})
         module_headers = ("Module", "Description", "Class", "Controller", "Plant Area", "Category", "Classification", "Reason", "History Point Count", "History Status", "History Link")
-        history_headers = ("Module", "History Tag", "Module Description", "Module Class", "Plant Area", "Unit Module", "Process Cell", *properties)
+        history_headers = ("Module", "History Tag", "Module Description", "Module Class", "Plant Area", "Unit Module", "Process Cell", "Source Block", "Block Type", "History Instance", "Field", *properties)
         for status, module_sheet, history_sheet, alarm_sheet in (
             ("KEEP", "Modules", "Module History", "Module Alarms"),
             ("REVIEW", "Review Modules", "Review History", "Review Alarms"),
@@ -43,7 +43,9 @@ class ModuleReportExporter:
                 for point in points:
                     history_ws.append((point.module_name, point.history_tag, point.module_description,
                                        point.module_class, point.plant_area, point.unit_module_name,
-                                       point.process_cell_name, *(point.properties.get(key, "") for key in properties)))
+                                       point.process_cell_name, point.source_block, point.block_type,
+                                       point.history_instance, point.field_name,
+                                       *(point.properties.get(key, "") for key in properties)))
                 modules_ws.append((module.module_name, module.description, module.module_class,
                                    module.controller, module.plant_area, decision.category,
                                    decision.classification, decision.reason, len(points),

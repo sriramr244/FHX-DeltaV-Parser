@@ -142,6 +142,10 @@ def test_service_processes_fhx_and_exports_alarm_report(
     assert filtered["Module Alarms"].max_row == 1
     assert filtered["Review Alarms"]["A2"].value == "MODULE_001"
     assert filtered["Review History"]["A2"].value == "MODULE_001"
+    history_sheet = filtered["Review History"]
+    history_row = dict(zip([c.value for c in history_sheet[1]], [c.value for c in history_sheet[2]]))
+    assert history_row["Source Block"] == "AI1"
+    assert history_row["Block Type"] == "AI"
 
     history_path = (
         output_directory
@@ -243,5 +247,11 @@ MODULE TAG="TT101" PLANT_AREA="AREA" CATEGORY=""
     assert history.max_row == 2
     assert history["B2"].value == "PT101/AI1/PV.CV"
     assert dict(zip([c.value for c in history[1]], [c.value for c in history[2]]))["SAMPLE_PERIOD_SECONDS"] == "2"
+    headers = [c.value for c in history[1]]
+    row = dict(zip(headers, [c.value for c in history[2]]))
+    assert row["Source Block"] == "AI1"
+    assert row["Block Type"] is None  # A history path alone cannot prove an AI block.
+    assert row["History Instance"] == "AI1/PV"
+    assert row["Field"] == "CV"
     assert workbook["Review History"]["A2"].value == "MYSTERY"
     assert workbook["Filter Audit"].max_row == 5

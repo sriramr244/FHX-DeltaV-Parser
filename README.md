@@ -56,7 +56,7 @@ History tag format is `MODULE/HISTORY_INSTANCE.FIELD`. Class-defined history is 
 Every normal desktop/service run also writes `_filtered_module_report.xlsx`:
 
 - **Modules**: retained modules, classification reason, history-point count, and a clickable link to their history rows.
-- **Module History**: one row per history point belonging to a retained module, with all parsed settings.
+- **Module History**: one row per history point belonging to a retained module, with all parsed settings and the actual source block, declared block type (including AI), history instance, and field. Block types come from function-block declarations, including class inheritance, instance overrides, and nested composite definitions; they are never inferred from a block name such as `AI1`. Unresolved block types stay blank. Module-level history has no source block. These columns also appear in **Review History**.
 - **Module Alarms**: alarms belonging to the same retained modules.
 - **Review Modules**, **Review History**, and **Review Alarms**: ambiguous modules and their associated records for manual review.
 - **Filter Audit**: every module and its KEEP / REMOVE / REVIEW decision, category, reason, and history count.

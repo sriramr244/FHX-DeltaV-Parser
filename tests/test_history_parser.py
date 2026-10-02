@@ -117,3 +117,53 @@ def test_history_field_outside_instance_does_not_attach_to_previous_instance():
 }
 '''.splitlines()
     assert [p.history_tag for p in HistoryParser().parse(lines)] == ["PT101/AI1/PV.CV"]
+
+
+def test_history_resolves_actual_block_types_and_instance_overrides():
+    lines = '''FUNCTION_BLOCK_DEFINITION NAME="SENSOR" CATEGORY=""
+{
+ FUNCTION_BLOCK NAME="INPUT" DEFINITION="AI"
+ {
+ }
+}
+MODULE_CLASS NAME="PRESSURE"
+{
+ FUNCTION_BLOCK NAME="TRANSMITTER" DEFINITION="AI"
+ {
+ }
+ FUNCTION_BLOCK NAME="AI1" DEFINITION="CALC"
+ {
+ }
+ FUNCTION_BLOCK NAME="COMP" DEFINITION="SENSOR"
+ {
+ }
+'''
+    for path in ('TRANSMITTER/PV', 'AI1/OUT', 'COMP$INPUT$PV', 'MISSING/PV', 'PV'):
+        lines += f''' HISTORY_DATA_POINT_INSTANCE NAME="{path}"
+ {{
+  HISTORY_DATA_POINT FIELD="CV"
+  {{
+   ENABLED=T
+  }}
+ }}
+'''
+    lines += '''}
+MODULE_INSTANCE TAG="PT101" MODULE_CLASS="PRESSURE"
+{
+ FUNCTION_BLOCK NAME="TRANSMITTER" DEFINITION="AO"
+ {
+ }
+}
+MODULE_INSTANCE TAG="PT102" MODULE_CLASS="PRESSURE"
+{
+}
+'''
+    points = {p.history_tag: p for p in HistoryParser().parse(lines.splitlines())}
+    assert len(points) == 10
+    assert points['PT101/TRANSMITTER/PV.CV'].block_type == 'AO'
+    assert points['PT102/TRANSMITTER/PV.CV'].block_type == 'AI'
+    assert points['PT101/AI1/OUT.CV'].block_type == 'CALC'
+    nested = points['PT101/COMP/INPUT/PV.CV']
+    assert (nested.source_block, nested.block_type, nested.field_name) == ('COMP/INPUT', 'AI', 'CV')
+    assert points['PT101/MISSING/PV.CV'].block_type == ''
+    assert points['PT101/PV.CV'].source_block == ''
